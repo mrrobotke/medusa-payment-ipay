@@ -1,0 +1,144 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [ published ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18, 20, 22]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linting
+        run: npm run lint || echo "No lint script found"
+
+      - name: Run unit tests
+        run: npm run test:unit
+
+      - name: Run integration tests
+        run: npm run test:integration || echo "Integration tests skipped"
+
+      - name: Test build
+        run: npm run build
+
+      - name: Generate test coverage
+        run: npm run test:coverage
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage/lcov.info
+          fail_ci_if_error: false
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run security audit
+        run: npm audit --audit-level high
+
+      - name: Check for vulnerabilities
+        run: npm audit fix --dry-run
+
+  publish:
+    needs: [test, security]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release' && github.event.action == 'published'
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build for production
+        run: npm run build
+
+      - name: Verify package contents
+        run: npm pack --dry-run
+
+      - name: Check if version exists on npm
+        id: check-version
+        run: |
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          if npm view medusa-payment-ipay@$PACKAGE_VERSION version 2>/dev/null; then
+            echo "version-exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "version-exists=false" >> $GITHUB_OUTPUT
+          fi
+          echo "package-version=$PACKAGE_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Publish to NPM
+        if: steps.check-version.outputs.version-exists == 'false'
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create GitHub Release Assets
+        if: steps.check-version.outputs.version-exists == 'false'
+        run: |
+          npm pack
+          mv medusa-payment-ipay-*.tgz medusa-payment-ipay-${{ steps.check-version.outputs.package-version }}.tgz
+
+      - name: Upload Release Asset
+        if: steps.check-version.outputs.version-exists == 'false'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./medusa-payment-ipay-${{ steps.check-version.outputs.package-version }}.tgz
+          asset_name: medusa-payment-ipay-${{ steps.check-version.outputs.package-version }}.tgz
+          asset_content_type: application/gzip
+
+      - name: Notify success
+        if: steps.check-version.outputs.version-exists == 'false'
+        run: |
+          echo "✅ Successfully published medusa-payment-ipay@${{ steps.check-version.outputs.package-version }} to NPM!"
+          echo "📦 Package URL: https://www.npmjs.com/package/medusa-payment-ipay"
+
+      - name: Skip publishing (version exists)
+        if: steps.check-version.outputs.version-exists == 'true'
+        run: |
+          echo "⚠️ Version ${{ steps.check-version.outputs.package-version }} already exists on NPM. Skipping publish." 

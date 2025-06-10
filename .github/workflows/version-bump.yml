@@ -1,0 +1,118 @@
+name: Version Bump and Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      release_notes:
+        description: 'Release notes'
+        required: false
+        default: ''
+
+jobs:
+  version-bump:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests before version bump
+        run: |
+          npm run test:unit
+          npm run build
+
+      - name: Bump version
+        id: version-bump
+        run: |
+          OLD_VERSION=$(node -p "require('./package.json').version")
+          npm version ${{ github.event.inputs.version_type }} --no-git-tag-version
+          NEW_VERSION=$(node -p "require('./package.json').version")
+          echo "old-version=$OLD_VERSION" >> $GITHUB_OUTPUT
+          echo "new-version=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Update CHANGELOG
+        run: |
+          NEW_VERSION="${{ steps.version-bump.outputs.new-version }}"
+          DATE=$(date +"%Y-%m-%d")
+          
+          # Create CHANGELOG.md if it doesn't exist
+          if [ ! -f CHANGELOG.md ]; then
+            echo "# Changelog" > CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            echo "All notable changes to this project will be documented in this file." >> CHANGELOG.md
+            echo "" >> CHANGELOG.md
+          fi
+          
+          # Prepare release notes
+          RELEASE_NOTES="${{ github.event.inputs.release_notes }}"
+          if [ -z "$RELEASE_NOTES" ]; then
+            RELEASE_NOTES="Version bump to $NEW_VERSION"
+          fi
+          
+          # Add new version to CHANGELOG
+          sed -i "3i## [$NEW_VERSION] - $DATE\n\n$RELEASE_NOTES\n" CHANGELOG.md
+
+      - name: Commit changes
+        run: |
+          git add package.json package-lock.json CHANGELOG.md
+          git commit -m "chore: bump version to ${{ steps.version-bump.outputs.new-version }}"
+          git push origin main
+
+      - name: Create and push tag
+        run: |
+          git tag "v${{ steps.version-bump.outputs.new-version }}"
+          git push origin "v${{ steps.version-bump.outputs.new-version }}"
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: "v${{ steps.version-bump.outputs.new-version }}"
+          release_name: "Release v${{ steps.version-bump.outputs.new-version }}"
+          body: |
+            ## Changes in v${{ steps.version-bump.outputs.new-version }}
+            
+            ${{ github.event.inputs.release_notes }}
+            
+            **Previous version:** v${{ steps.version-bump.outputs.old-version }}
+            
+            ## Installation
+            ```bash
+            npm install medusa-payment-ipay@${{ steps.version-bump.outputs.new-version }}
+            ```
+            
+            ## Links
+            - 📦 [NPM Package](https://www.npmjs.com/package/medusa-payment-ipay)
+            - 📖 [Documentation](https://github.com/mrrobotke/medusa-payment-ipay#readme)
+            - 🐛 [Report Issues](https://github.com/mrrobotke/medusa-payment-ipay/issues)
+          draft: false
+          prerelease: false 
