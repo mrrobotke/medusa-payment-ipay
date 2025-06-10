@@ -30,16 +30,16 @@ jobs:
         run: yarn lint || echo "No lint script found"
 
       - name: Run unit tests
-        run: yarn test:unit
+        run: yarn test:unit:safe
 
       - name: Run integration tests
-        run: yarn test:integration || echo "Integration tests skipped"
+        run: yarn test:ci:safe
 
       - name: Test build
         run: yarn build
 
       - name: Generate test coverage
-        run: yarn test:coverage
+        run: yarn test:coverage:safe
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3

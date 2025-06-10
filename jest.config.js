@@ -17,6 +17,23 @@ module.exports = {
   modulePathIgnorePatterns: ["dist/"],
   setupFiles: ["./integration-tests/setup.js"],
   detectOpenHandles: true,
+  collectCoverageFrom: [
+    "src/**/*.{js,ts}",
+    "!src/**/__tests__/**",
+    "!src/**/*.test.{js,ts}",
+    "!src/**/*.spec.{js,ts}",
+    "!**/node_modules/**",
+    "!**/dist/**"
+  ],
+  coverageReporters: ["text", "lcov", "html"],
+  coverageThreshold: {
+    global: {
+      branches: 0,
+      functions: 0,
+      lines: 0,
+      statements: 0
+    }
+  },
 }
 
 if (process.env.TEST_TYPE === "integration:http") {
