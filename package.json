@@ -2,16 +2,16 @@
   "name": "medusa-payment-ipay",
   "version": "1.0.0",
   "description": "iPay Africa payment provider for Medusa v2 - Supports M-Pesa, Airtel Money, Credit Cards, and PesaLink",
-  "author": "Your Name <your.email@example.com>",
+  "author": "Antony Ngigge <antonyngigge@iworldafric.com>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-username/medusa-payment-ipay.git"
+    "url": "https://github.com/mrrobotke/medusa-payment-ipay.git"
   },
   "bugs": {
-    "url": "https://github.com/your-username/medusa-payment-ipay/issues"
+    "url": "https://github.com/mrrobotke/medusa-payment-ipay/issues"
   },
-  "homepage": "https://github.com/your-username/medusa-payment-ipay#readme",
+  "homepage": "https://github.com/mrrobotke/medusa-payment-ipay#readme",
   "main": ".medusa/server/src/providers/ipay/index.js",
   "files": [
     ".medusa/server",
