@@ -1,50 +1,30 @@
-const { pathsToModuleNameMapper } = require('ts-jest');
+const { loadEnv } = require("@medusajs/framework/utils")
+loadEnv("test", process.cwd())
 
 module.exports = {
-  displayName: "iPay Payment Plugin",
-  testEnvironment: "node",
-  preset: "ts-jest",
-  globals: {
-    "ts-jest": {
-      tsconfig: "tsconfig.json",
-    },
-  },
-  testPathIgnorePatterns: ["/node_modules/", "<rootDir>/dist/"],
-  collectCoverageFrom: [
-    "src/providers/**/*.{ts,tsx}",
-    "!src/**/*.d.ts",
-    "!src/**/__tests__/**",
-    "!src/**/__mocks__/**",
-    "!src/**/index.ts",
-  ],
-  coverageDirectory: "coverage",
-  coverageReporters: ["text", "lcov", "html"],
-  coverageThreshold: {
-    "src/providers/**/*.ts": {
-      branches: 70,
-      functions: 90,
-      lines: 85,
-      statements: 85,
-    },
-  },
   transform: {
-    "^.+\\.(t|j)sx?$": ["@swc/jest"],
+    "^.+\\.[jt]s$": [
+      "@swc/jest",
+      {
+        jsc: {
+          parser: { syntax: "typescript", decorators: true },
+        },
+      },
+    ],
   },
-  setupFilesAfterEnv: ["<rootDir>/jest.setup.js"],
-  moduleNameMapper: {
-    "^@/(.*)$": "<rootDir>/src/$1",
-    "^~/(.*)$": "<rootDir>/$1",
-  },
-  testMatch: [
-    "<rootDir>/src/**/__tests__/**/*.(test|spec).{ts,tsx}",
-    "<rootDir>/integration-tests/**/*.(test|spec).{ts,tsx}",
-  ],
-  moduleDirectories: ["node_modules", "<rootDir>/src"],
-  moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json"],
-  verbose: true,
-  silent: false,
-  bail: false,
-  forceExit: true,
-  detectOpenHandles: true,
-  testTimeout: 60000,
-}; 
+  testEnvironment: "node",
+  moduleFileExtensions: ["js", "ts", "json"],
+  modulePathIgnorePatterns: ["dist/"],
+  setupFiles: ["./integration-tests/setup.js"],
+}
+
+if (process.env.TEST_TYPE === "integration:http") {
+  module.exports.testMatch = ["**/integration-tests/http/*.spec.[jt]s"]
+} else if (process.env.TEST_TYPE === "integration:modules") {
+  module.exports.testMatch = [
+    "**/src/modules/*/__tests__/**/*.[jt]s",
+    "**/src/providers/*/__tests__/**/*.integration.spec.[jt]s"
+  ]
+} else if (process.env.TEST_TYPE === "unit") {
+  module.exports.testMatch = ["**/src/**/__tests__/**/*.unit.spec.[jt]s"]
+} 

@@ -2,16 +2,12 @@ import { MedusaContainer } from "@medusajs/framework/types";
 import crypto from "crypto";
 import IPayProviderService from "../service";
 
-// Mock fetch globally
-global.fetch = jest.fn();
-
 describe("IPayProviderService", () => {
   let service: IPayProviderService;
   let mockOptions: any;
   let mockContainer: MedusaContainer;
 
   beforeEach(() => {
-    jest.clearAllMocks();
     
     mockOptions = {
       vid: 'test_vid',
