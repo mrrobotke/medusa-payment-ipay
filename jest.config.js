@@ -16,10 +16,7 @@ module.exports = {
   moduleFileExtensions: ["js", "ts", "json"],
   modulePathIgnorePatterns: ["dist/"],
   setupFiles: ["./integration-tests/setup.js"],
-  forceExit: true,
   detectOpenHandles: true,
-  maxWorkers: 1,
-  testTimeout: 30000,
 }
 
 if (process.env.TEST_TYPE === "integration:http") {
