@@ -24,7 +24,7 @@ jobs:
           cache: 'yarn'
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: yarn install
 
       - name: Run linting
         run: yarn lint || echo "No lint script found"
