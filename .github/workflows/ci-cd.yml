@@ -62,9 +62,6 @@ jobs:
       - name: Install dependencies
         run: yarn install
 
-      - name: Run security audit
-        run: yarn audit --level high
-
       - name: Check for vulnerabilities
         run: yarn audit --dry-run
 
