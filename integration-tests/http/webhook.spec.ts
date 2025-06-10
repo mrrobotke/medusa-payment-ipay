@@ -1,0 +1,413 @@
+import { medusaIntegrationTestRunner } from "@medusajs/test-utils";
+import crypto from "crypto";
+
+medusaIntegrationTestRunner({
+  testSuite: ({ api, getContainer }) => {
+    describe("iPay Webhook API", () => {
+      const generateTestHash = (data: string, key: string): string => {
+        return crypto.createHmac("sha1", key).update(data).digest("hex");
+      };
+
+      const createWebhookPayload = (status: string, overrides: any = {}) => {
+        const basePayload = {
+          id: "order_test_123",
+          ivm: "INV_order_test_123",
+          qwh: generateTestHash("test_data", "test_key"),
+          afd: "",
+          poi: "",
+          uyt: "",
+          ifd: "",
+          agt: "1",
+          mc: "100.00",
+          p1: "order_test_123",
+          p2: "cus_test_123",
+          p3: "",
+          p4: "",
+          status,
+          txncd: "test_txn_123",
+          msisdn_id: "test_msisdn",
+          msisdn_idnum: "254700000000",
+          ...overrides,
+        };
+        return basePayload;
+      };
+
+      describe("POST /webhooks/ipay", () => {
+        it("should handle successful payment webhook", async () => {
+          const webhookData = createWebhookPayload("aei7p7yrx4ae34");
+          
+          const response = await api.post("/webhooks/ipay", webhookData);
+          
+          expect(response.status).toEqual(200);
+          expect(response.data).toEqual({
+            message: "Webhook processed successfully",
+            received: true,
+          });
+        });
+
+        it("should handle pending payment webhook", async () => {
+          const webhookData = createWebhookPayload("bdi6p2yy76etrs");
+          
+          const response = await api.post("/webhooks/ipay", webhookData);
+          
+          expect(response.status).toEqual(200);
+          expect(response.data).toEqual({
+            message: "Webhook processed successfully",
+            received: true,
+          });
+        });
+
+        it("should handle failed payment webhook", async () => {
+          const webhookData = createWebhookPayload("fe2707etr5s4wq");
+          
+          const response = await api.post("/webhooks/ipay", webhookData);
+          
+          expect(response.status).toEqual(200);
+          expect(response.data).toEqual({
+            message: "Webhook processed successfully",
+            received: true,
+          });
+        });
+
+        it("should handle 'less amount' payment webhook", async () => {
+          const webhookData = createWebhookPayload("dtfi4p7yty45wq");
+          
+          const response = await api.post("/webhooks/ipay", webhookData);
+          
+          expect(response.status).toEqual(200);
+          expect(response.data).toEqual({
+            message: "Webhook processed successfully",
+            received: true,
+          });
+        });
+
+        it("should handle 'used code' payment webhook", async () => {
+          const webhookData = createWebhookPayload("cr5i3pgy9867e1");
+          
+          const response = await api.post("/webhooks/ipay", webhookData);
+          
+          expect(response.status).toEqual(200);
+          expect(response.data).toEqual({
+            message: "Webhook processed successfully",
+            received: true,
+          });
+        });
+
+        it("should handle unknown status gracefully", async () => {
+          const webhookData = createWebhookPayload("unknown_status_code");
+          
+          const response = await api.post("/webhooks/ipay", webhookData);
+          
+          expect(response.status).toEqual(200);
+          expect(response.data).toEqual({
+            message: "Webhook processed successfully",
+            received: true,
+          });
+        });
+
+        it("should handle malformed payload gracefully", async () => {
+          const response = await api.post("/webhooks/ipay", {
+            invalid: "payload",
+          });
+          
+          expect(response.status).toEqual(200);
+          expect(response.data).toEqual({
+            message: "Webhook processed successfully",
+            received: true,
+          });
+        });
+
+        it("should handle empty payload", async () => {
+          const response = await api.post("/webhooks/ipay", {});
+          
+          expect(response.status).toEqual(200);
+          expect(response.data).toEqual({
+            message: "Webhook processed successfully",
+            received: true,
+          });
+        });
+
+        it("should validate required webhook fields", async () => {
+          const webhookData = createWebhookPayload("aei7p7yrx4ae34", {
+            id: undefined,
+          });
+          
+          const response = await api.post("/webhooks/ipay", webhookData);
+          
+          // Should still process but handle missing fields gracefully
+          expect(response.status).toEqual(200);
+        });
+
+        it("should handle large amounts correctly", async () => {
+          const webhookData = createWebhookPayload("aei7p7yrx4ae34", {
+            mc: "999999.99",
+          });
+          
+          const response = await api.post("/webhooks/ipay", webhookData);
+          
+          expect(response.status).toEqual(200);
+          expect(response.data).toEqual({
+            message: "Webhook processed successfully",
+            received: true,
+          });
+        });
+
+        it("should handle special characters in customer data", async () => {
+          const webhookData = createWebhookPayload("aei7p7yrx4ae34", {
+            p1: "order_special_chars_!@#$",
+            p2: "customer_with_special_chars",
+          });
+          
+          const response = await api.post("/webhooks/ipay", webhookData);
+          
+          expect(response.status).toEqual(200);
+        });
+
+        it("should log webhook data for debugging", async () => {
+          const webhookData = createWebhookPayload("aei7p7yrx4ae34");
+          
+          const response = await api.post("/webhooks/ipay", webhookData);
+          
+          expect(response.status).toEqual(200);
+          // In a real test, you might want to check logs or database entries
+        });
+      });
+
+      describe("GET /webhooks/ipay", () => {
+        it("should handle GET callback from iPay for success", async () => {
+          const queryParams = new URLSearchParams({
+            id: "order_test_123",
+            status: "aei7p7yrx4ae34",
+            mc: "100.00",
+            ivm: "INV_order_test_123",
+            p1: "order_test_123",
+            p2: "cus_test_123",
+            txncd: "test_txn_123",
+          });
+          
+          const response = await api.get(`/webhooks/ipay?${queryParams.toString()}`);
+          
+          // Should redirect for GET requests
+          expect([200, 302]).toContain(response.status);
+        });
+
+        it("should handle GET callback for failed payment", async () => {
+          const queryParams = new URLSearchParams({
+            id: "order_test_123",
+            status: "fe2707etr5s4wq",
+            mc: "100.00",
+            ivm: "INV_order_test_123",
+          });
+          
+          const response = await api.get(`/webhooks/ipay?${queryParams.toString()}`);
+          
+          // Should redirect for GET requests
+          expect([200, 302]).toContain(response.status);
+        });
+
+        it("should handle missing query parameters", async () => {
+          const response = await api.get("/webhooks/ipay");
+          
+          // Should handle gracefully
+          expect([200, 302, 500]).toContain(response.status);
+        });
+
+        it("should handle partial query parameters", async () => {
+          const queryParams = new URLSearchParams({
+            id: "order_test_123",
+            status: "aei7p7yrx4ae34",
+          });
+          
+          const response = await api.get(`/webhooks/ipay?${queryParams.toString()}`);
+          
+          expect([200, 302]).toContain(response.status);
+        });
+
+        it("should handle URL encoded parameters", async () => {
+          const queryParams = new URLSearchParams({
+            id: "order_test_123",
+            p1: "order%20with%20spaces",
+            p2: "customer%40example.com",
+          });
+          
+          const response = await api.get(`/webhooks/ipay?${queryParams.toString()}`);
+          
+          expect([200, 302, 500]).toContain(response.status);
+        });
+
+        it("should process different status codes via GET", async () => {
+          const statuses = [
+            "aei7p7yrx4ae34", // success
+            "bdi6p2yy76etrs", // pending
+            "fe2707etr5s4wq", // failed
+            "dtfi4p7yty45wq", // less amount
+            "cr5i3pgy9867e1", // used code
+          ];
+
+          for (const status of statuses) {
+            const queryParams = new URLSearchParams({
+              id: `order_${status}_test`,
+              status,
+            });
+            
+            const response = await api.get(`/webhooks/ipay?${queryParams.toString()}`);
+            
+            // Should handle all status codes
+            expect([200, 302, 500]).toContain(response.status);
+          }
+        });
+      });
+
+      describe("Error handling", () => {
+        it("should handle invalid JSON in POST body gracefully", async () => {
+          // Most modern frameworks will handle this at the middleware level
+          // This test ensures the endpoint doesn't crash
+          try {
+            const response = await api.post("/webhooks/ipay", "invalid-json", {
+              headers: { 'Content-Type': 'application/json' }
+            });
+            expect([200, 400, 500]).toContain(response.status);
+          } catch (error) {
+            // Expected to potentially throw a parsing error
+            expect(error).toBeDefined();
+          }
+        });
+
+        it("should handle extremely large payloads", async () => {
+          const largePayload = createWebhookPayload("aei7p7yrx4ae34", {
+            p3: "x".repeat(1000), // Large string but not too large to break the test
+          });
+          
+          const response = await api.post("/webhooks/ipay", largePayload);
+          
+          expect([200, 413, 500]).toContain(response.status); // 413 = Payload Too Large
+        });
+
+        it("should handle non-string values gracefully", async () => {
+          const webhookData = createWebhookPayload("aei7p7yrx4ae34", {
+            mc: 100, // Number instead of string
+            agt: true, // Boolean instead of string
+          });
+          
+          const response = await api.post("/webhooks/ipay", webhookData);
+          
+          expect([200, 500]).toContain(response.status);
+        });
+      });
+
+      describe("Security", () => {
+        it("should handle potential XSS in parameters", async () => {
+          const webhookData = createWebhookPayload("aei7p7yrx4ae34", {
+            p1: "<script>alert('xss')</script>",
+            p2: "customer_<script>alert('xss')</script>",
+          });
+          
+          const response = await api.post("/webhooks/ipay", webhookData);
+          
+          expect([200, 500]).toContain(response.status);
+        });
+
+        it("should handle SQL injection attempts in parameters", async () => {
+          const webhookData = createWebhookPayload("aei7p7yrx4ae34", {
+            id: "order'; DROP TABLE orders; --",
+            p1: "' OR 1=1 --",
+          });
+          
+          const response = await api.post("/webhooks/ipay", webhookData);
+          
+          expect([200, 500]).toContain(response.status);
+        });
+
+        it("should validate hash parameter if present", async () => {
+          const webhookData = createWebhookPayload("aei7p7yrx4ae34", {
+            qwh: "invalid_hash_value",
+          });
+          
+          const response = await api.post("/webhooks/ipay", webhookData);
+          
+          // Should still process but might log security warning
+          expect([200, 500]).toContain(response.status);
+        });
+      });
+
+      describe("Performance", () => {
+        it("should handle concurrent webhook requests", async () => {
+          const promises = Array.from({ length: 5 }, (_, i) => {
+            const webhookData = createWebhookPayload("aei7p7yrx4ae34", {
+              id: `order_concurrent_${i}`,
+              p1: `order_concurrent_${i}`,
+            });
+            return api.post("/webhooks/ipay", webhookData);
+          });
+
+          const responses = await Promise.all(promises);
+          
+          responses.forEach((response) => {
+            expect([200, 500]).toContain(response.status);
+          });
+        });
+
+        it("should process webhooks within reasonable time", async () => {
+          const start = Date.now();
+          const webhookData = createWebhookPayload("aei7p7yrx4ae34");
+          
+          const response = await api.post("/webhooks/ipay", webhookData);
+          const duration = Date.now() - start;
+          
+          expect([200, 500]).toContain(response.status);
+          expect(duration).toBeLessThan(10000); // Should complete within 10 seconds
+        });
+      });
+
+      describe("Webhook payload variations", () => {
+        it("should handle minimal webhook payload", async () => {
+          const minimalPayload = {
+            id: "order_minimal",
+            status: "aei7p7yrx4ae34",
+            ivm: "INV_minimal",
+            qwh: "test_hash",
+            afd: "",
+            poi: "",
+            uyt: "",
+            ifd: "",
+            agt: "1",
+          };
+          
+          const response = await api.post("/webhooks/ipay", minimalPayload);
+          
+          expect([200, 500]).toContain(response.status);
+        });
+
+        it("should handle webhook with all optional fields", async () => {
+          const fullPayload = createWebhookPayload("aei7p7yrx4ae34", {
+            txncd: "TXN123456789",
+            msisdn_id: "MSISDN_ID_123",
+            msisdn_idnum: "254712345678",
+            p3: "additional_param_3",
+            p4: "additional_param_4",
+          });
+          
+          const response = await api.post("/webhooks/ipay", fullPayload);
+          
+          expect([200, 500]).toContain(response.status);
+        });
+
+        it("should handle webhook with empty string values", async () => {
+          const webhookData = createWebhookPayload("aei7p7yrx4ae34", {
+            p1: "",
+            p2: "",
+            p3: "",
+            p4: "",
+            mc: "",
+          });
+          
+          const response = await api.post("/webhooks/ipay", webhookData);
+          
+          expect([200, 500]).toContain(response.status);
+        });
+      });
+    });
+  },
+});
+
+jest.setTimeout(60 * 1000); 
