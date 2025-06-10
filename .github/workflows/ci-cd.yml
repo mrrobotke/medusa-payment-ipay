@@ -196,6 +196,25 @@ $COMMITS
           git tag "v${{ steps.version-bump.outputs.new-version }}"
           git push origin "v${{ steps.version-bump.outputs.new-version }}"
 
+      - name: Create release body file
+        if: steps.check-bump.outputs.needs-bump == 'true'
+        run: |
+          cat > release_body.txt << 'EOF'
+          ${{ steps.changelog.outputs.changelog-entry }}
+          
+          **Previous version:** v${{ steps.version-bump.outputs.old-version }}
+          
+          ## Installation
+          ```bash
+          npm install medusa-payment-ipay@${{ steps.version-bump.outputs.new-version }}
+          ```
+          
+          ## Links
+          - 📦 [NPM Package](https://www.npmjs.com/package/medusa-payment-ipay)
+          - 📖 [Documentation](https://github.com/mrrobotke/medusa-payment-ipay#readme)
+          - 🐛 [Report Issues](https://github.com/mrrobotke/medusa-payment-ipay/issues)
+          EOF
+
       - name: Create GitHub Release
         if: steps.check-bump.outputs.needs-bump == 'true'
         uses: actions/create-release@v1
@@ -204,20 +223,7 @@ $COMMITS
         with:
           tag_name: "v${{ steps.version-bump.outputs.new-version }}"
           release_name: "Release v${{ steps.version-bump.outputs.new-version }}"
-          body: |
-            ${{ steps.changelog.outputs.changelog-entry }}
-            
-            **Previous version:** v${{ steps.version-bump.outputs.old-version }}
-            
-            ## Installation
-            ```bash
-            npm install medusa-payment-ipay@${{ steps.version-bump.outputs.new-version }}
-            ```
-            
-            ## Links
-            - 📦 [NPM Package](https://www.npmjs.com/package/medusa-payment-ipay)
-            - 📖 [Documentation](https://github.com/mrrobotke/medusa-payment-ipay#readme)
-            - 🐛 [Report Issues](https://github.com/mrrobotke/medusa-payment-ipay/issues)
+          body_path: ./release_body.txt
           draft: false
           prerelease: false
 
