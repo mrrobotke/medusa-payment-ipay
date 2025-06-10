@@ -1,4 +1,4 @@
-name: Version Bump and Release
+name: Manual Version Bump and Release
 
 on:
   workflow_dispatch:
@@ -16,9 +16,14 @@ on:
         description: 'Release notes'
         required: false
         default: ''
+      skip_tests:
+        description: 'Skip tests (not recommended)'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
-  version-bump:
+  manual-version-bump:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -29,6 +34,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -45,17 +51,22 @@ jobs:
         run: npm ci
 
       - name: Run tests before version bump
+        if: github.event.inputs.skip_tests == 'false'
         run: |
           npm run test:unit
           npm run build
 
+      - name: Get current version
+        id: current-version
+        run: |
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          echo "current-version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+
       - name: Bump version
         id: version-bump
         run: |
-          OLD_VERSION=$(node -p "require('./package.json').version")
           npm version ${{ github.event.inputs.version_type }} --no-git-tag-version
           NEW_VERSION=$(node -p "require('./package.json').version")
-          echo "old-version=$OLD_VERSION" >> $GITHUB_OUTPUT
           echo "new-version=$NEW_VERSION" >> $GITHUB_OUTPUT
 
       - name: Update CHANGELOG
@@ -74,16 +85,26 @@ jobs:
           # Prepare release notes
           RELEASE_NOTES="${{ github.event.inputs.release_notes }}"
           if [ -z "$RELEASE_NOTES" ]; then
-            RELEASE_NOTES="Version bump to $NEW_VERSION"
+            RELEASE_NOTES="Manual version bump to $NEW_VERSION"
           fi
           
           # Add new version to CHANGELOG
-          sed -i "3i## [$NEW_VERSION] - $DATE\n\n$RELEASE_NOTES\n" CHANGELOG.md
+          TEMP_FILE=$(mktemp)
+          echo "# Changelog" > $TEMP_FILE
+          echo "" >> $TEMP_FILE
+          echo "All notable changes to this project will be documented in this file." >> $TEMP_FILE
+          echo "" >> $TEMP_FILE
+          echo "## [$NEW_VERSION] - $DATE" >> $TEMP_FILE
+          echo "" >> $TEMP_FILE
+          echo "$RELEASE_NOTES" >> $TEMP_FILE
+          echo "" >> $TEMP_FILE
+          tail -n +4 CHANGELOG.md >> $TEMP_FILE
+          mv $TEMP_FILE CHANGELOG.md
 
       - name: Commit changes
         run: |
           git add package.json package-lock.json CHANGELOG.md
-          git commit -m "chore: bump version to ${{ steps.version-bump.outputs.new-version }}"
+          git commit -m "chore: manual release v${{ steps.version-bump.outputs.new-version }}"
           git push origin main
 
       - name: Create and push tag
@@ -103,7 +124,8 @@ jobs:
             
             ${{ github.event.inputs.release_notes }}
             
-            **Previous version:** v${{ steps.version-bump.outputs.old-version }}
+            **Previous version:** v${{ steps.current-version.outputs.current-version }}
+            **Release type:** ${{ github.event.inputs.version_type }}
             
             ## Installation
             ```bash
@@ -115,4 +137,12 @@ jobs:
             - 📖 [Documentation](https://github.com/mrrobotke/medusa-payment-ipay#readme)
             - 🐛 [Report Issues](https://github.com/mrrobotke/medusa-payment-ipay/issues)
           draft: false
-          prerelease: false 
+          prerelease: false
+
+      - name: Summary
+        run: |
+          echo "✅ Manual release completed!"
+          echo "📊 Version: ${{ steps.current-version.outputs.current-version }} → ${{ steps.version-bump.outputs.new-version }}"
+          echo "📝 Type: ${{ github.event.inputs.version_type }}"
+          echo "🏷️ Tag: v${{ steps.version-bump.outputs.new-version }}"
+          echo "📦 NPM publish will be triggered automatically" 

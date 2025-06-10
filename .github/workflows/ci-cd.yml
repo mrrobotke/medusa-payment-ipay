@@ -5,8 +5,6 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-  release:
-    types: [ published ]
 
 jobs:
   test:
@@ -70,75 +68,167 @@ jobs:
       - name: Check for vulnerabilities
         run: npm audit fix --dry-run
 
-  publish:
+  # Automatically trigger version bump and release when tests pass on main branch
+  auto-release:
     needs: [test, security]
     runs-on: ubuntu-latest
-    if: github.event_name == 'release' && github.event.action == 'published'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
-      contents: read
-      id-token: write
+      contents: write
+      pull-requests: write
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
           cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Build for production
-        run: npm run build
-
-      - name: Verify package contents
-        run: npm pack --dry-run
-
-      - name: Check if version exists on npm
-        id: check-version
+      - name: Configure Git
         run: |
-          PACKAGE_VERSION=$(node -p "require('./package.json').version")
-          if npm view medusa-payment-ipay@$PACKAGE_VERSION version 2>/dev/null; then
-            echo "version-exists=true" >> $GITHUB_OUTPUT
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Check if version bump is needed
+        id: check-bump
+        run: |
+          # Get commit messages since last tag
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$LAST_TAG" ]; then
+            echo "No previous tags found, creating initial release"
+            echo "needs-bump=true" >> $GITHUB_OUTPUT
+            echo "bump-type=minor" >> $GITHUB_OUTPUT
           else
-            echo "version-exists=false" >> $GITHUB_OUTPUT
+            # Check commit messages for version bump indicators
+            COMMITS=$(git log $LAST_TAG..HEAD --oneline)
+            if echo "$COMMITS" | grep -qE "(BREAKING CHANGE|feat!|fix!|chore!)"; then
+              echo "needs-bump=true" >> $GITHUB_OUTPUT
+              echo "bump-type=major" >> $GITHUB_OUTPUT
+            elif echo "$COMMITS" | grep -qE "(feat|feature)"; then
+              echo "needs-bump=true" >> $GITHUB_OUTPUT
+              echo "bump-type=minor" >> $GITHUB_OUTPUT
+            elif echo "$COMMITS" | grep -qE "(fix|patch|chore|docs|style|refactor|test)"; then
+              echo "needs-bump=true" >> $GITHUB_OUTPUT
+              echo "bump-type=patch" >> $GITHUB_OUTPUT
+            else
+              echo "No version bump needed based on commit messages"
+              echo "needs-bump=false" >> $GITHUB_OUTPUT
+            fi
           fi
-          echo "package-version=$PACKAGE_VERSION" >> $GITHUB_OUTPUT
 
-      - name: Publish to NPM
-        if: steps.check-version.outputs.version-exists == 'false'
-        run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Create GitHub Release Assets
-        if: steps.check-version.outputs.version-exists == 'false'
+      - name: Bump version
+        id: version-bump
+        if: steps.check-bump.outputs.needs-bump == 'true'
         run: |
-          npm pack
-          mv medusa-payment-ipay-*.tgz medusa-payment-ipay-${{ steps.check-version.outputs.package-version }}.tgz
+          OLD_VERSION=$(node -p "require('./package.json').version")
+          npm version ${{ steps.check-bump.outputs.bump-type }} --no-git-tag-version
+          NEW_VERSION=$(node -p "require('./package.json').version")
+          echo "old-version=$OLD_VERSION" >> $GITHUB_OUTPUT
+          echo "new-version=$NEW_VERSION" >> $GITHUB_OUTPUT
 
-      - name: Upload Release Asset
-        if: steps.check-version.outputs.version-exists == 'false'
-        uses: actions/upload-release-asset@v1
+      - name: Generate changelog entry
+        id: changelog
+        if: steps.check-bump.outputs.needs-bump == 'true'
+        run: |
+          NEW_VERSION="${{ steps.version-bump.outputs.new-version }}"
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          
+          # Get commits since last tag
+          if [ -z "$LAST_TAG" ]; then
+            COMMITS=$(git log --oneline --pretty=format:"- %s" HEAD~10..HEAD)
+          else
+            COMMITS=$(git log --oneline --pretty=format:"- %s" $LAST_TAG..HEAD)
+          fi
+          
+          # Create changelog entry
+          CHANGELOG_ENTRY="## [$NEW_VERSION] - $(date +"%Y-%m-%d")
+
+### Changes
+$COMMITS
+"
+          
+          # Save to output (escape newlines)
+          echo "changelog-entry<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG_ENTRY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Update CHANGELOG
+        if: steps.check-bump.outputs.needs-bump == 'true'
+        run: |
+          # Create CHANGELOG.md if it doesn't exist
+          if [ ! -f CHANGELOG.md ]; then
+            echo "# Changelog" > CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            echo "All notable changes to this project will be documented in this file." >> CHANGELOG.md
+            echo "" >> CHANGELOG.md
+          fi
+          
+          # Add new version to CHANGELOG
+          TEMP_FILE=$(mktemp)
+          echo "# Changelog" > $TEMP_FILE
+          echo "" >> $TEMP_FILE
+          echo "All notable changes to this project will be documented in this file." >> $TEMP_FILE
+          echo "" >> $TEMP_FILE
+          echo "${{ steps.changelog.outputs.changelog-entry }}" >> $TEMP_FILE
+          echo "" >> $TEMP_FILE
+          tail -n +4 CHANGELOG.md >> $TEMP_FILE
+          mv $TEMP_FILE CHANGELOG.md
+
+      - name: Commit and push changes
+        if: steps.check-bump.outputs.needs-bump == 'true'
+        run: |
+          git add package.json package-lock.json CHANGELOG.md
+          git commit -m "chore: release v${{ steps.version-bump.outputs.new-version }}"
+          git push origin main
+
+      - name: Create and push tag
+        if: steps.check-bump.outputs.needs-bump == 'true'
+        run: |
+          git tag "v${{ steps.version-bump.outputs.new-version }}"
+          git push origin "v${{ steps.version-bump.outputs.new-version }}"
+
+      - name: Create GitHub Release
+        if: steps.check-bump.outputs.needs-bump == 'true'
+        uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./medusa-payment-ipay-${{ steps.check-version.outputs.package-version }}.tgz
-          asset_name: medusa-payment-ipay-${{ steps.check-version.outputs.package-version }}.tgz
-          asset_content_type: application/gzip
+          tag_name: "v${{ steps.version-bump.outputs.new-version }}"
+          release_name: "Release v${{ steps.version-bump.outputs.new-version }}"
+          body: |
+            ${{ steps.changelog.outputs.changelog-entry }}
+            
+            **Previous version:** v${{ steps.version-bump.outputs.old-version }}
+            
+            ## Installation
+            ```bash
+            npm install medusa-payment-ipay@${{ steps.version-bump.outputs.new-version }}
+            ```
+            
+            ## Links
+            - 📦 [NPM Package](https://www.npmjs.com/package/medusa-payment-ipay)
+            - 📖 [Documentation](https://github.com/mrrobotke/medusa-payment-ipay#readme)
+            - 🐛 [Report Issues](https://github.com/mrrobotke/medusa-payment-ipay/issues)
+          draft: false
+          prerelease: false
 
-      - name: Notify success
-        if: steps.check-version.outputs.version-exists == 'false'
+      - name: Log completion
+        if: steps.check-bump.outputs.needs-bump == 'true'
         run: |
-          echo "✅ Successfully published medusa-payment-ipay@${{ steps.check-version.outputs.package-version }} to NPM!"
-          echo "📦 Package URL: https://www.npmjs.com/package/medusa-payment-ipay"
+          echo "✅ Automated release completed!"
+          echo "🏷️ Created tag: v${{ steps.version-bump.outputs.new-version }}"
+          echo "📦 NPM publish will be triggered automatically by the tag"
 
-      - name: Skip publishing (version exists)
-        if: steps.check-version.outputs.version-exists == 'true'
+      - name: No release needed
+        if: steps.check-bump.outputs.needs-bump == 'false'
         run: |
-          echo "⚠️ Version ${{ steps.check-version.outputs.package-version }} already exists on NPM. Skipping publish." 
+          echo "ℹ️ No version bump needed based on commit messages since last release" 

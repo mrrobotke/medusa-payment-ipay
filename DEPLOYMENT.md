@@ -1,192 +1,176 @@
 # 🚀 Deployment Guide
 
-This guide explains how to set up automated deployment to npm using GitHub Actions.
+This repository uses a fully automated CI/CD pipeline that handles testing, version bumping, and publishing to NPM without any manual intervention.
+
+## 🚀 Automated CI/CD Pipeline
+
+### How It Works
+
+1. **Continuous Integration (CI)**
+   - Runs automatically on every push to `main` branch and on pull requests
+   - Tests across Node.js versions 18, 20, and 22
+   - Runs linting, unit tests, integration tests, and security audits
+   - Builds the package to ensure it compiles correctly
+
+2. **Automatic Version Bumping**
+   - After CI tests pass on `main` branch, the system analyzes commit messages
+   - Automatically determines the appropriate version bump type:
+     - **Major**: `BREAKING CHANGE`, `feat!`, `fix!`, `chore!`
+     - **Minor**: `feat`, `feature`
+     - **Patch**: `fix`, `patch`, `chore`, `docs`, `style`, `refactor`, `test`
+   - Updates `package.json`, generates changelog, creates Git tag
+   - Creates GitHub release with automatic release notes
+
+3. **Automatic NPM Publishing**
+   - Triggered automatically when a new Git tag is pushed
+   - Verifies tests pass, builds production package
+   - Publishes to NPM with public access and provenance
+   - Skips publishing if version already exists
+
+### 🔄 Workflow Sequence
+
+```mermaid
+graph TD
+    A[Push to main] --> B[CI Tests]
+    B --> C{Tests Pass?}
+    C -->|Yes| D[Analyze Commits]
+    C -->|No| E[❌ Stop - Fix Issues]
+    D --> F{Version Bump Needed?}
+    F -->|Yes| G[Bump Version]
+    F -->|No| H[ℹ️ No Release Needed]
+    G --> I[Update Changelog]
+    I --> J[Commit & Push]
+    J --> K[Create Git Tag]
+    K --> L[Create GitHub Release]
+    L --> M[🏷️ Tag Triggers NPM Publish]
+    M --> N[Run Tests Again]
+    N --> O[Build Package]
+    O --> P[📦 Publish to NPM]
+    P --> Q[✅ Complete!]
+```
+
+## 🏗️ Available Workflows
+
+### 1. Main CI/CD Pipeline (`.github/workflows/ci-cd.yml`)
+- **Trigger**: Push to main, pull requests
+- **Purpose**: Full automated pipeline from testing to release
+- **Actions**: Test → Version bump → Release → Trigger NPM publish
+
+### 2. NPM Publishing (`.github/workflows/npm-publish.yml`)
+- **Trigger**: Git tags (`v*`), GitHub releases
+- **Purpose**: Publish package to NPM registry
+- **Actions**: Test → Build → Publish
+
+### 3. Manual Version Bump (`.github/workflows/version-bump.yml`)
+- **Trigger**: Manual workflow dispatch
+- **Purpose**: Manual control over releases when needed
+- **Actions**: Test → Version bump → Release → Trigger NPM publish
+
+## 📝 Commit Message Conventions
+
+To ensure proper automatic version bumping, use conventional commit messages:
+
+### Major Version (Breaking Changes)
+```bash
+git commit -m "feat!: redesign API with breaking changes"
+git commit -m "BREAKING CHANGE: remove deprecated methods"
+```
+
+### Minor Version (New Features)
+```bash
+git commit -m "feat: add new payment method support"
+git commit -m "feature: implement webhook validation"
+```
+
+### Patch Version (Bug Fixes)
+```bash
+git commit -m "fix: resolve payment callback issue"
+git commit -m "chore: update dependencies"
+git commit -m "docs: improve installation guide"
+```
+
+### No Version Bump
+```bash
+git commit -m "ci: update workflow configuration"
+git commit -m "test: add unit tests for edge cases"
+```
+
+## 🔧 Manual Release (When Needed)
+
+If you need manual control over a release:
+
+1. Go to **Actions** tab in GitHub
+2. Select **Manual Version Bump and Release**
+3. Click **Run workflow**
+4. Choose:
+   - Version type: `patch`, `minor`, or `major`
+   - Release notes (optional)
+   - Skip tests option (not recommended)
 
 ## 📋 Prerequisites
 
-1. **NPM Account**: Ensure you have an npm account and are logged in
-2. **GitHub Repository**: Your code should be in a GitHub repository
-3. **NPM Token**: Generate an npm access token for automated publishing
-
-## 🔐 Setup NPM Token
-
-### Step 1: Generate NPM Access Token
-
-1. Log in to [npmjs.com](https://www.npmjs.com)
-2. Go to your profile → **Access Tokens**
-3. Click **"Generate New Token"**
-4. Choose **"Automation"** (for CI/CD use)
-5. Copy the generated token
-
-### Step 2: Add NPM Token to GitHub Secrets
-
-1. Go to your GitHub repository
-2. Navigate to **Settings** → **Secrets and variables** → **Actions**
-3. Click **"New repository secret"**
-4. Name: `NPM_TOKEN`
-5. Value: Paste your npm token
-6. Click **"Add secret"**
-
-## 🔄 Automated Workflows
-
-We've set up three GitHub Actions workflows:
-
-### 1. NPM Publish (`npm-publish.yml`)
-**Triggers**: When you create a release or push a version tag
-**Purpose**: Simple, direct publishing to npm
-
-```yaml
-# Triggered on:
-# - Creating a GitHub release
-# - Pushing tags like v1.0.1
-```
-
-### 2. CI/CD Pipeline (`ci-cd.yml`)
-**Triggers**: Push to main, PRs, releases
-**Purpose**: Complete testing and deployment pipeline
-
-**Features**:
-- ✅ Tests on Node.js 18, 20, 22
-- 🔒 Security audits
-- 📊 Code coverage
-- 🚀 Conditional npm publishing
-- 📦 Release asset generation
-
-### 3. Version Bump (`version-bump.yml`)
-**Triggers**: Manual workflow dispatch
-**Purpose**: Automated version management
-
-**Features**:
-- 🔢 Bump patch/minor/major versions
-- 📝 Auto-generate changelog
-- 🏷️ Create git tags
-- 📋 Create GitHub releases
-
-## 🎯 Deployment Methods
-
-### Method 1: Create GitHub Release (Recommended)
-
-1. Go to your repository → **Releases**
-2. Click **"Create a new release"**
-3. Choose a tag (e.g., `v1.0.1`) or create new one
-4. Add release title and description
-5. Click **"Publish release"**
-
-✅ This will automatically:
-- Run tests
-- Build the package
-- Publish to npm
-- Attach build artifacts
-
-### Method 2: Use Version Bump Workflow
-
-1. Go to **Actions** → **Version Bump and Release**
-2. Click **"Run workflow"**
-3. Choose version type (patch/minor/major)
-4. Add release notes (optional)
-5. Click **"Run workflow"**
-
-✅ This will automatically:
-- Bump version in package.json
-- Update CHANGELOG.md
-- Create git tag
-- Create GitHub release
-- Trigger npm publishing
-
-### Method 3: Manual Tag Push
+### Repository Secrets
+Ensure these secrets are configured in GitHub repository settings:
 
 ```bash
-# Bump version manually
-npm version patch  # or minor/major
-
-# Push the tag
-git push origin v1.0.1
+NPM_TOKEN=your_npm_token_here
+GITHUB_TOKEN=automatically_provided
 ```
 
-## 🔧 Configuration
+### NPM Token Setup
+1. Go to [npmjs.com](https://www.npmjs.com)
+2. Navigate to **Access Tokens** in your account settings
+3. Create a new **Automation** token
+4. Add it as `NPM_TOKEN` secret in GitHub repository
 
-### Package.json Scripts
-Ensure these scripts exist in your `package.json`:
+## 🛡️ Security & Quality
 
-```json
-{
-  "scripts": {
-    "build": "medusa plugin:build",
-    "test": "jest --testPathPattern=src",
-    "test:unit": "jest --testPathPattern=src --testPathIgnorePatterns=integration-tests",
-    "test:integration": "jest --testPathPattern=integration-tests",
-    "test:coverage": "jest --coverage",
-    "prepublishOnly": "medusa plugin:build"
-  }
-}
-```
-
-### Environment Variables
-
-The workflows use these environment variables:
-- `NPM_TOKEN`: Your npm access token (from GitHub secrets)
-- `GITHUB_TOKEN`: Automatically provided by GitHub
+- **Security Audits**: Runs `npm audit` on every build
+- **Multi-Node Testing**: Tests across Node.js 18, 20, and 22
+- **Build Verification**: Ensures package builds correctly
+- **Duplicate Prevention**: Checks if version already exists before publishing
+- **Provenance**: NPM packages include build provenance for security
 
 ## 📊 Monitoring
 
-### Check Deployment Status
-
-1. **GitHub Actions**: Go to **Actions** tab to see workflow runs
-2. **NPM Package**: Check https://www.npmjs.com/package/medusa-payment-ipay
-3. **Release Assets**: View in **Releases** section
+### Check Pipeline Status
+- **GitHub Actions**: Monitor all workflows in the Actions tab
+- **NPM Registry**: Verify published versions at [npmjs.com/package/medusa-payment-ipay](https://www.npmjs.com/package/medusa-payment-ipay)
+- **Releases**: Track releases in the GitHub Releases section
 
 ### Troubleshooting
 
-**Common Issues**:
+**Pipeline Failed?**
+1. Check the Actions tab for error details
+2. Fix the issues in your code
+3. Push the fix - pipeline will run automatically
 
-1. **NPM_TOKEN not set**: Add the secret in repository settings
-2. **Version already exists**: The workflow checks and skips if version exists
-3. **Tests failing**: Fix tests before the workflow will publish
-4. **Build errors**: Ensure `npm run build` works locally
+**Version Not Bumped?**
+- Ensure your commit messages follow conventional format
+- Check if there are commits since the last tag
+- Use manual workflow if needed
 
-**Debug Steps**:
-1. Check workflow logs in GitHub Actions
-2. Verify npm token permissions
-3. Test build and publish locally first
+**NPM Publish Failed?**
+- Verify `NPM_TOKEN` secret is valid
+- Check if version already exists on NPM
+- Ensure package builds correctly locally
 
-## 🔄 Version Management
+## 🎯 Best Practices
 
-### Semantic Versioning
+1. **Small, Focused Commits**: Make commits that represent single logical changes
+2. **Clear Commit Messages**: Follow conventional commit format
+3. **Test Locally**: Run tests before pushing to avoid CI failures
+4. **Review Changes**: Use pull requests for collaborative review
+5. **Monitor Releases**: Check that automation worked as expected
 
-Follow [SemVer](https://semver.org/):
-- **Patch** (1.0.1): Bug fixes
-- **Minor** (1.1.0): New features (backward compatible)
-- **Major** (2.0.0): Breaking changes
+## 📞 Support
 
-### Release Notes Template
+If you encounter issues with the deployment pipeline:
+1. Check the GitHub Actions logs for detailed error messages
+2. Verify repository secrets are correctly configured
+3. Ensure commit messages follow the conventional format
+4. Use manual workflows as fallback when needed
 
-```markdown
-## New Features
-- Added support for XYZ
-- Improved ABC functionality
+---
 
-## Bug Fixes
-- Fixed issue with DEF
-- Resolved GHI error
-
-## Breaking Changes
-- Changed JKL interface
-- Removed deprecated MNO
-
-## Migration Guide
-Steps to upgrade from previous version...
-```
-
-## 🛡️ Security
-
-- ✅ NPM tokens are stored securely in GitHub secrets
-- ✅ Workflows use official GitHub Actions
-- ✅ Security audits run on every build
-- ✅ Provenance information included in packages
-
-## 📚 Resources
-
-- [NPM Tokens Documentation](https://docs.npmjs.com/about-access-tokens)
-- [GitHub Actions Documentation](https://docs.github.com/en/actions)
-- [Semantic Versioning](https://semver.org/)
-- [GitHub Releases](https://docs.github.com/en/repositories/releasing-projects-on-github) 
+*This automated pipeline ensures consistent, reliable releases while maintaining high code quality and security standards.* 
