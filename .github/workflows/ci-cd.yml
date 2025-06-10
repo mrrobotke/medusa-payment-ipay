@@ -142,23 +142,18 @@ jobs:
           NEW_VERSION="${{ steps.version-bump.outputs.new-version }}"
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
           
-          # Get commits since last tag
           if [ -z "$LAST_TAG" ]; then
             COMMITS=$(git log --oneline --pretty=format:"- %s" HEAD~10..HEAD)
           else
             COMMITS=$(git log --oneline --pretty=format:"- %s" $LAST_TAG..HEAD)
           fi
           
-          # Create changelog entry
-          CHANGELOG_ENTRY="## [$NEW_VERSION] - $(date +"%Y-%m-%d")
-
-### Changes
-$COMMITS
-"
-          
-          # Save to output (escape newlines)
           echo "changelog-entry<<EOF" >> $GITHUB_OUTPUT
-          echo "$CHANGELOG_ENTRY" >> $GITHUB_OUTPUT
+          echo "## [$NEW_VERSION] - $(date +"%Y-%m-%d")" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "### Changes" >> $GITHUB_OUTPUT
+          echo "$COMMITS" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Update CHANGELOG
@@ -199,21 +194,19 @@ $COMMITS
       - name: Create release body file
         if: steps.check-bump.outputs.needs-bump == 'true'
         run: |
-          cat > release_body.txt << 'EOF'
-          ${{ steps.changelog.outputs.changelog-entry }}
-          
-          **Previous version:** v${{ steps.version-bump.outputs.old-version }}
-          
-          ## Installation
-          ```bash
-          npm install medusa-payment-ipay@${{ steps.version-bump.outputs.new-version }}
-          ```
-          
-          ## Links
-          - 📦 [NPM Package](https://www.npmjs.com/package/medusa-payment-ipay)
-          - 📖 [Documentation](https://github.com/mrrobotke/medusa-payment-ipay#readme)
-          - 🐛 [Report Issues](https://github.com/mrrobotke/medusa-payment-ipay/issues)
-          EOF
+          echo '${{ steps.changelog.outputs.changelog-entry }}' > release_body.txt
+          echo '' >> release_body.txt
+          echo '**Previous version:** v${{ steps.version-bump.outputs.old-version }}' >> release_body.txt
+          echo '' >> release_body.txt
+          echo '## Installation' >> release_body.txt
+          echo '```bash' >> release_body.txt
+          echo 'npm install medusa-payment-ipay@${{ steps.version-bump.outputs.new-version }}' >> release_body.txt
+          echo '```' >> release_body.txt
+          echo '' >> release_body.txt
+          echo '## Links' >> release_body.txt
+          echo '- [NPM Package](https://www.npmjs.com/package/medusa-payment-ipay)' >> release_body.txt
+          echo '- [Documentation](https://github.com/mrrobotke/medusa-payment-ipay#readme)' >> release_body.txt
+          echo '- [Report Issues](https://github.com/mrrobotke/medusa-payment-ipay/issues)' >> release_body.txt
 
       - name: Create GitHub Release
         if: steps.check-bump.outputs.needs-bump == 'true'
@@ -230,11 +223,11 @@ $COMMITS
       - name: Log completion
         if: steps.check-bump.outputs.needs-bump == 'true'
         run: |
-          echo "✅ Automated release completed!"
-          echo "🏷️ Created tag: v${{ steps.version-bump.outputs.new-version }}"
-          echo "📦 NPM publish will be triggered automatically by the tag"
+          echo "Automated release completed!"
+          echo "Created tag: v${{ steps.version-bump.outputs.new-version }}"
+          echo "NPM publish will be triggered automatically by the tag"
 
       - name: No release needed
         if: steps.check-bump.outputs.needs-bump == 'false'
         run: |
-          echo "ℹ️ No version bump needed based on commit messages since last release" 
+          echo "No version bump needed based on commit messages since last release" 
