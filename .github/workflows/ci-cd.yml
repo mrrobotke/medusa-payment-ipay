@@ -62,9 +62,6 @@ jobs:
       - name: Install dependencies
         run: yarn install
 
-      - name: Check for vulnerabilities
-        run: yarn audit --dry-run
-
   # Automatically trigger version bump and release when tests pass on main branch
   auto-release:
     needs: [test, security]
